@@ -322,6 +322,11 @@ async def discover(
         description="Media type: 'movie' or 'tv'.",
         examples={"movie": {"value": "movie"}, "tv": {"value": "tv"}},
     ),
+    provider_id: int | None = Query(
+        default=None,
+        ge=1,
+        description="TMDB watch provider ID for US movie discovery.",
+    ),
 ) -> dict[str, Any]:
     """
     **Mood-driven discovery endpoint.**
@@ -335,7 +340,11 @@ async def discover(
     """
     media_type = type if type in ("movie", "tv") else "movie"
     try:
-        results = await tmdb_svc.discover_by_mood(mood=mood, media_type=media_type)
+        if provider_id is not None:
+            results = await tmdb_svc.discover_by_provider(provider_id=provider_id)
+            media_type = "movie"
+        else:
+            results = await tmdb_svc.discover_by_mood(mood=mood, media_type=media_type)
     except Exception as exc:
         logger.error("discover error: %s", exc)
         raise HTTPException(status_code=502, detail="TMDB discovery request failed.")

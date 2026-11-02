@@ -157,6 +157,61 @@ export const MOCK_DISCOVER = {
   ],
 }
 
+const STREAMING_PROVIDER_FALLBACKS = {
+  netflix: {
+    id: 8,
+    movies: [
+      { id: 512195, title: 'Red Notice', release_year: 2021, vote_average: 6.3 },
+      { id: 661374, title: 'Glass Onion: A Knives Out Mystery', release_year: 2022, vote_average: 7.1 },
+      { id: 426426, title: 'Roma', release_year: 2018, vote_average: 7.7 },
+      { id: 545609, title: 'Extraction', release_year: 2020, vote_average: 7.1 },
+      { id: 405774, title: 'Bird Box', release_year: 2018, vote_average: 6.8 },
+      { id: 725201, title: 'The Gray Man', release_year: 2022, vote_average: 6.9 },
+      { id: 646380, title: "Don't Look Up", release_year: 2021, vote_average: 7.1 },
+      { id: 398978, title: 'The Irishman', release_year: 2019, vote_average: 7.6 },
+    ],
+  },
+  prime: {
+    id: 119,
+    movies: [
+      { id: 157336, title: 'Interstellar', release_year: 2014, vote_average: 8.4 },
+      { id: 312221, title: 'Creed', release_year: 2015, vote_average: 7.4 },
+      { id: 588228, title: 'The Tomorrow War', release_year: 2021, vote_average: 7.5 },
+      { id: 502033, title: 'Sound of Metal', release_year: 2019, vote_average: 7.7 },
+      { id: 1008409, title: 'The Burial', release_year: 2023, vote_average: 7.1 },
+      { id: 964980, title: 'Air', release_year: 2023, vote_average: 7.4 },
+      { id: 416477, title: 'The Big Sick', release_year: 2017, vote_average: 7.3 },
+      { id: 484718, title: 'Coming 2 America', release_year: 2021, vote_average: 6.5 },
+    ],
+  },
+  hotstar: {
+    id: 122,
+    movies: [
+      { id: 299534, title: 'Avengers: Endgame', release_year: 2019, vote_average: 8.3 },
+      { id: 118340, title: 'Guardians of the Galaxy', release_year: 2014, vote_average: 7.9 },
+      { id: 19995, title: 'Avatar', release_year: 2009, vote_average: 7.6 },
+      { id: 508442, title: 'Soul', release_year: 2020, vote_average: 8.1 },
+      { id: 1022789, title: 'Inside Out 2', release_year: 2024, vote_average: 7.6 },
+      { id: 354912, title: 'Coco', release_year: 2017, vote_average: 8.2 },
+      { id: 568124, title: 'Encanto', release_year: 2021, vote_average: 7.6 },
+      { id: 284054, title: 'Black Panther', release_year: 2018, vote_average: 7.4 },
+    ],
+  },
+  appletv: {
+    id: 350,
+    movies: [
+      { id: 466420, title: 'Killers of the Flower Moon', release_year: 2023, vote_average: 7.5 },
+      { id: 776503, title: 'CODA', release_year: 2021, vote_average: 8.0 },
+      { id: 516486, title: 'Greyhound', release_year: 2020, vote_average: 7.4 },
+      { id: 597891, title: 'Finch', release_year: 2021, vote_average: 7.9 },
+      { id: 726759, title: 'Tetris', release_year: 2023, vote_average: 7.7 },
+      { id: 441130, title: 'Wolfwalkers', release_year: 2020, vote_average: 8.2 },
+      { id: 613093, title: 'On the Rocks', release_year: 2020, vote_average: 6.5 },
+      { id: 803700, title: 'Causeway', release_year: 2022, vote_average: 6.6 },
+    ],
+  },
+}
+
 // ── Normaliser: maps backend shape → UI shape ────────────────────────────
 export function normalise(item, index = 0) {
   // Rank-tiered match scoring descending from 96%
@@ -243,8 +298,16 @@ export async function fetchDiscoverMovies(mood = 'trending', mediaType = 'movie'
     )
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
+    const results = data.results || []
+    if (results.length === 0) {
+      console.warn(`[api] fetchDiscoverMovies: no results for ${mood}, falling back to trending demo data`)
+      return {
+        movies: MOCK_DISCOVER.trending.map(normalise),
+        isOffline: false,
+      }
+    }
     return {
-      movies:    (data.results || []).map(normalise),
+      movies:    results.map(normalise),
       isOffline: false,
     }
   } catch (err) {
@@ -254,6 +317,29 @@ export async function fetchDiscoverMovies(mood = 'trending', mediaType = 'movie'
       movies:    fallbackList.map(normalise),
       isOffline: true,
     }
+  }
+}
+
+export async function fetchProviderMovies(platform) {
+  const provider = STREAMING_PROVIDER_FALLBACKS[platform]
+  if (!provider) throw new Error(`Unknown streaming platform: ${platform}`)
+
+  try {
+    const res = await fetch(
+      `${BASE}/discover?provider_id=${provider.id}&type=movie`,
+      { signal: AbortSignal.timeout(9000) }
+    )
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    const results = data.results || []
+    if (!results.length) {
+      console.warn(`[api] fetchProviderMovies: no results for ${platform}, using curated titles`)
+      return { movies: provider.movies.map(normalise), isOffline: false }
+    }
+    return { movies: results.map(normalise), isOffline: false }
+  } catch (err) {
+    console.warn(`[api] fetchProviderMovies: request failed for ${platform}, using curated titles`, err)
+    return { movies: provider.movies.map(normalise), isOffline: true }
   }
 }
 

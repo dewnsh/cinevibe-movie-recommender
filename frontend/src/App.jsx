@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { AlertCircle, WifiOff, Shuffle, ScanFace } from 'lucide-react'
 import Navbar from './components/Navbar'
 import HeroSearch from './components/HeroSearch'
@@ -7,16 +7,45 @@ import MovieGrid from './components/MovieGrid'
 import MovieDetailModal from './components/MovieDetailModal'
 import CompatibilityMixer from './components/CompatibilityMixer'
 import EmotionScanner from './components/EmotionScanner'
-import { fetchRecommendations, fetchDiscoverMovies } from './services/api'
+import { fetchRecommendations, fetchDiscoverMovies, fetchProviderMovies } from './services/api'
+
+const OTT_LABELS = {
+  netflix: 'NETFLIX',
+  prime: 'PRIME VIDEO',
+  hotstar: 'DISNEY+ HOTSTAR',
+  appletv: 'APPLE TV',
+}
 
 export default function App() {
   const [mediaType, setMediaType] = useState('movie')
   const [activeMood, setActiveMood] = useState('trending')
   const [activeOTT, setActiveOTT] = useState([])
   const [movies, setMovies] = useState([])
+  const [trendingMovies, setTrendingMovies] = useState([])
+  const [providerMovies, setProviderMovies] = useState([])
   const [loading, setLoading] = useState(true)
+  const providerRequestId = useRef(0)
+  const toastTimeout = useRef(null)
+  const [toastMessage, setToastMessage] = useState('')
   const [selectedMovie, setSelectedMovie] = useState(null)
   const [isWatchlistView, setIsWatchlistView] = useState(false)
+  const [watchedMovieIds, setWatchedMovieIds] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('cinevibe_watched') || '[]')
+      return Array.isArray(saved) ? saved : []
+    } catch (error) {
+      console.warn('Failed to load watched movies from localStorage', error)
+      return []
+    }
+  })
+  const [hideWatched, setHideWatched] = useState(() => {
+    try {
+      return localStorage.getItem('cinevibe_hide_watched') === 'true'
+    } catch (error) {
+      console.warn('Failed to load Hide Watched preference from localStorage', error)
+      return false
+    }
+  })
   const [searchQuery, setSearchQuery] = useState('')
   const [headline, setHeadline] = useState('TRENDING TONIGHT')
   const [subline, setSubline] = useState('Most streamed and critically acclaimed cinema right now')
@@ -46,6 +75,30 @@ export default function App() {
     }
   }, [watchlist])
 
+  useEffect(() => {
+    try {
+      localStorage.setItem('cinevibe_watched', JSON.stringify(watchedMovieIds))
+    } catch (error) {
+      console.warn('Failed to save watched movies to localStorage', error)
+    }
+  }, [watchedMovieIds])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('cinevibe_hide_watched', String(hideWatched))
+    } catch (error) {
+      console.warn('Failed to save Hide Watched preference to localStorage', error)
+    }
+  }, [hideWatched])
+
+  useEffect(() => () => clearTimeout(toastTimeout.current), [])
+
+  const showToast = (message) => {
+    setToastMessage(message)
+    clearTimeout(toastTimeout.current)
+    toastTimeout.current = setTimeout(() => setToastMessage(''), 2400)
+  }
+
   // Fetch movies by mood
   const loadMood = useCallback(async (mood, type) => {
     setLoading(true)
@@ -70,7 +123,17 @@ export default function App() {
 
     try {
       const res = await fetchDiscoverMovies(mood, type)
-      setMovies(res.movies || [])
+      const discoveredMovies = [...(res.movies || [])]
+      if (mood === 'trending') {
+        for (let i = discoveredMovies.length - 1; i > 0; i -= 1) {
+          const j = Math.floor(Math.random() * (i + 1))
+          const movie = discoveredMovies[i]
+          discoveredMovies[i] = discoveredMovies[j]
+          discoveredMovies[j] = movie
+        }
+      }
+      setMovies(discoveredMovies)
+      if (mood === 'trending') setTrendingMovies(discoveredMovies)
       setIsOffline(Boolean(res.isOffline))
     } catch (err) {
       console.error('Error fetching discovery movies:', err)
@@ -117,8 +180,42 @@ export default function App() {
 
   // Mood selection change
   const handleMoodSelect = (moodId) => {
+    providerRequestId.current += 1
+    setActiveOTT([])
+    setProviderMovies([])
     setActiveMood(moodId)
     loadMood(moodId, mediaType)
+  }
+
+  const handleOTTSelect = async (platform) => {
+    const requestId = ++providerRequestId.current
+    if (activeOTT[0] === platform) {
+      setActiveOTT([])
+      setProviderMovies([])
+      if (!searchQuery && !isWatchlistView) {
+        setActiveMood('trending')
+        setHeadline('TRENDING TONIGHT')
+        setSubline('Most streamed and critically acclaimed cinema right now')
+        if (trendingMovies.length) setMovies(trendingMovies)
+      }
+      setLoading(false)
+      return
+    }
+
+    setActiveOTT([platform])
+    setLoading(true)
+    try {
+      const result = await fetchProviderMovies(platform)
+      if (requestId === providerRequestId.current) {
+        setProviderMovies(result.movies)
+        setIsOffline(Boolean(result.isOffline))
+      }
+    } catch (err) {
+      console.error(`Error fetching ${platform} movies:`, err)
+      setIsOffline(true)
+    } finally {
+      if (requestId === providerRequestId.current) setLoading(false)
+    }
   }
 
   // Emotion lock callback from EmotionScanner
@@ -157,29 +254,38 @@ export default function App() {
     })
   }
 
+  const handleWatchedToggle = (movie) => {
+    const isWatched = watchedMovieIds.includes(movie.id)
+    setWatchedMovieIds((prev) => (
+      prev.includes(movie.id)
+        ? prev.filter((id) => id !== movie.id)
+        : [...prev, movie.id]
+    ))
+    showToast(isWatched ? 'Removed from watched' : 'Marked as watched')
+  }
+
+  const handlePickFromWatchlist = () => {
+    if (!watchlist.length) {
+      showToast('Your watchlist is empty! Add movies first.')
+      return
+    }
+    const pick = watchlist[Math.floor(Math.random() * watchlist.length)]
+    setSelectedMovie(pick)
+  }
+
   // Filter movies by active streaming OTT services
   const displayedMovies = useMemo(() => {
+    if (activeOTT.length && !isWatchlistView) return providerMovies
     const sourceList = isWatchlistView ? watchlist : movies
-    if (!activeOTT || activeOTT.length === 0) {
-      return sourceList
-    }
+    return sourceList
+  }, [isWatchlistView, watchlist, movies, activeOTT, providerMovies])
 
-    const providerMap = {
-      netflix: 'Netflix',
-      prime:   'Prime Video',
-      hotstar: 'Disney+ Hotstar',
-      appletv: 'Apple TV',
-    }
-
-    const selectedProviderNames = activeOTT.map((id) => providerMap[id]).filter(Boolean)
-
-    return sourceList.filter((m) => {
-      const flatrate = m.providers?.flatrate || []
-      return flatrate.some((p) =>
-        selectedProviderNames.some((target) => p.name.toLowerCase().includes(target.toLowerCase()))
-      )
-    })
-  }, [isWatchlistView, watchlist, movies, activeOTT])
+  const visibleMovies = useMemo(
+    () => hideWatched
+      ? displayedMovies.filter((movie) => !watchedMovieIds.includes(movie.id))
+      : displayedMovies,
+    [displayedMovies, hideWatched, watchedMovieIds]
+  )
 
   // Watchlist navigation toggle
   const handleWatchlistNavClick = () => {
@@ -187,6 +293,9 @@ export default function App() {
       setIsWatchlistView(false)
       loadMood(activeMood, mediaType)
     } else {
+      providerRequestId.current += 1
+      setActiveOTT([])
+      setProviderMovies([])
       setIsWatchlistView(true)
       setSearchQuery('')
       setSearchNotice(null)
@@ -200,6 +309,9 @@ export default function App() {
   }
 
   const handleLogoClick = () => {
+    providerRequestId.current += 1
+    setActiveOTT([])
+    setProviderMovies([])
     setIsWatchlistView(false)
     setSearchQuery('')
     setSearchNotice(null)
@@ -208,7 +320,13 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0b0d10] text-white flex flex-col font-sans selection:bg-[#e50914] selection:text-white">
+    <div className="min-h-screen text-white flex flex-col font-sans selection:bg-[#e50914] selection:text-white">
+      <div className="cinematic-ambient" aria-hidden="true">
+        <span className="cinematic-orb cinematic-orb-red" />
+        <span className="cinematic-orb cinematic-orb-indigo" />
+        <span className="cinematic-orb cinematic-orb-amber" />
+        <span className="cinematic-film-grain" />
+      </div>
       {/* Sticky Glass Navbar */}
       <Navbar
         mediaType={mediaType}
@@ -293,7 +411,9 @@ export default function App() {
               activeMood={activeMood}
               setActiveMood={handleMoodSelect}
               activeOTT={activeOTT}
-              setActiveOTT={setActiveOTT}
+              onOTTSelect={handleOTTSelect}
+              hideWatched={hideWatched}
+              onHideWatchedToggle={() => setHideWatched((prev) => !prev)}
             />
           </>
         )}
@@ -310,14 +430,27 @@ export default function App() {
 
         {/* Movie Grid Section */}
         <MovieGrid
-          movies={displayedMovies}
+          movies={visibleMovies}
           loading={loading}
-          headline={headline}
-          subline={subline}
+          headline={
+            activeOTT.length && !isWatchlistView
+              ? `TRENDING ON ${OTT_LABELS[activeOTT[0]]}`
+              : headline
+          }
+          subline={
+            activeOTT.length && !isWatchlistView
+              ? 'Popular movies available on this streaming platform'
+              : subline
+          }
+          matchLabel={searchQuery || isWatchlistView || activeMood !== 'trending' ? 'Match' : 'Vibe Score'}
           selectedMovie={selectedMovie}
           onSelect={setSelectedMovie}
           watchlist={watchlist}
           onWatchlistToggle={handleWatchlistToggle}
+          watchedMovieIds={watchedMovieIds}
+          onWatchedToggle={handleWatchedToggle}
+          isWatchlistView={isWatchlistView}
+          onPickFromWatchlist={handlePickFromWatchlist}
         />
       </main>
 
@@ -340,6 +473,15 @@ export default function App() {
           inWatchlist={watchlist.some((w) => w.id === selectedMovie.id)}
           onWatchlistToggle={handleWatchlistToggle}
         />
+      )}
+      {toastMessage && (
+        <div
+          role="status"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] rounded-full border border-white/10
+            bg-[#1a1d24] px-4 py-2 text-sm text-white shadow-xl"
+        >
+          {toastMessage}
+        </div>
       )}
     </div>
   )

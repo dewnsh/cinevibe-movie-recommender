@@ -240,6 +240,43 @@ async def discover_by_mood(
     return output
 
 
+async def discover_by_provider(provider_id: int) -> list[dict[str, Any]]:
+    """Return popular movies on a streaming provider in the US."""
+    client = _get_client()
+    params = {
+        "with_watch_providers": provider_id,
+        "watch_region": "US",
+        "sort_by": "popularity.desc",
+        "page": 1,
+    }
+
+    try:
+        resp = await client.get("/discover/movie", params=params)
+        resp.raise_for_status()
+        results: list[dict] = resp.json().get("results", [])
+    except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+        logger.error("discover_by_provider error (%s): %s", provider_id, exc)
+        return []
+
+    output = []
+    for item in results[:20]:
+        raw_date: str = item.get("release_date", "")
+        output.append(
+            {
+                "id": item.get("id"),
+                "title": item.get("title", "Unknown"),
+                "overview": item.get("overview", ""),
+                "poster_url": _poster_url(item.get("poster_path")),
+                "backdrop_url": _poster_url(item.get("backdrop_path"), "w1280"),
+                "vote_average": round(item.get("vote_average", 0.0), 1),
+                "release_year": int(raw_date[:4]) if raw_date else None,
+                "genre_ids": item.get("genre_ids", []),
+                "media_type": "movie",
+            }
+        )
+    return output
+
+
 async def get_trailer_key(
     tmdb_id: int,
     media_type: str = "movie",

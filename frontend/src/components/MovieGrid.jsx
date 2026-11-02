@@ -52,10 +52,15 @@ export default function MovieGrid({
   loading,
   headline,
   subline,
+  matchLabel,
   selectedMovie,
   onSelect,
   watchlist,
   onWatchlistToggle,
+  watchedMovieIds,
+  onWatchedToggle,
+  isWatchlistView,
+  onPickFromWatchlist,
 }) {
   const [surpriseLoading, setSurpriseLoading] = useState(false)
   const [surpriseError, setSurpriseError] = useState(null)
@@ -100,6 +105,18 @@ export default function MovieGrid({
 
         {/* Surprise Me button */}
         <div className="flex flex-col items-end gap-1">
+          {isWatchlistView && (
+            <button
+              onClick={onPickFromWatchlist}
+              className="flex items-center gap-2 bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-1.5
+                text-sm text-white hover:bg-[#e50914]/10 hover:border-[#e50914]/30 hover:text-[#e50914]
+                transition-all duration-200 cursor-pointer"
+              title="Pick a random movie from your watchlist"
+            >
+              <Dices size={14} />
+              Pick For Me
+            </button>
+          )}
           <button
             onClick={handleSurpriseMe}
             disabled={surpriseLoading}
@@ -129,9 +146,12 @@ export default function MovieGrid({
               <MovieCard
                 key={movie.id}
                 movie={movie}
+                matchLabel={matchLabel}
                 onSelect={onSelect}
                 inWatchlist={watchlist.some((w) => w.id === movie.id)}
                 onWatchlistToggle={onWatchlistToggle}
+                isWatched={watchedMovieIds.includes(movie.id)}
+                onWatchedToggle={onWatchedToggle}
               />
             ))}
       </div>

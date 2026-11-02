@@ -4,13 +4,13 @@ import clsx from 'clsx'
 
 export default function Navbar({ mediaType, setMediaType, watchlist, onWatchlistClick, isWatchlistView, onLogoClick }) {
   return (
-    <nav className="sticky top-0 z-40 glass border-b border-white/[0.07]">
-      <div className="max-w-7xl mx-auto px-6 h-[60px] flex items-center justify-between">
+    <nav className="navbar sticky top-0 z-40 glass border-b border-white/[0.07]">
+      <div className="navbar-inner max-w-7xl mx-auto px-6 h-[60px] flex items-center justify-between">
 
         {/* Logo */}
         <button 
           onClick={onLogoClick}
-          className="flex items-center gap-2.5 shrink-0 hover:opacity-90 transition-opacity text-left cursor-pointer"
+          className="navbar-logo flex items-center gap-2.5 shrink-0 hover:opacity-90 transition-opacity text-left cursor-pointer"
         >
           <div className="w-8 h-8 bg-[#e50914] rounded-lg flex items-center justify-center shadow-lg shadow-[#e50914]/20">
             <Film size={16} strokeWidth={2.5} className="text-white" />
@@ -19,7 +19,7 @@ export default function Navbar({ mediaType, setMediaType, watchlist, onWatchlist
         </button>
 
         {/* Center pill toggle */}
-        <div className="flex items-center bg-white/[0.06] rounded-full p-1 border border-white/[0.08]">
+        <div className="navbar-media-toggle flex items-center bg-white/[0.06] rounded-full p-1 border border-white/[0.08]">
           {['Movies', 'TV Shows'].map((label) => {
             const val = label === 'Movies' ? 'movie' : 'tv'
             const active = mediaType === val
@@ -41,20 +41,21 @@ export default function Navbar({ mediaType, setMediaType, watchlist, onWatchlist
         </div>
 
         {/* Right: Watchlist + Avatar */}
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="navbar-actions flex items-center gap-3 shrink-0">
           <button
             onClick={onWatchlistClick}
+            aria-label="My Watchlist"
             className={clsx(
-              'flex items-center gap-2 px-4 py-1.5 rounded-full border text-sm font-medium transition-all cursor-pointer',
+              'navbar-watchlist flex items-center gap-2 px-4 py-1.5 rounded-full border text-sm font-medium transition-all cursor-pointer',
               isWatchlistView
                 ? 'bg-white/[0.12] border-white/30 text-white'
                 : 'border-white/[0.12] text-zinc-300 hover:border-white/30 hover:text-white'
             )}
           >
             <Bookmark size={14} className={isWatchlistView ? 'text-[#e50914]' : ''} />
-            My Watchlist
+            <span className="navbar-watchlist-label">My Watchlist</span>
             {watchlist.length > 0 && (
-              <span className="bg-[#e50914] text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center leading-none">
+              <span className="navbar-watchlist-count bg-[#e50914] text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center leading-none">
                 {watchlist.length}
               </span>
             )}

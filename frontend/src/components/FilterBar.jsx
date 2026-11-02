@@ -42,7 +42,14 @@ const OTT_BADGES = [
   },
 ]
 
-export default function FilterBar({ activeMood, setActiveMood, activeOTT, setActiveOTT }) {
+export default function FilterBar({
+  activeMood,
+  setActiveMood,
+  activeOTT,
+  onOTTSelect,
+  hideWatched,
+  onHideWatchedToggle,
+}) {
   return (
     <div className="max-w-7xl mx-auto px-6 space-y-4 pb-2">
 
@@ -63,6 +70,17 @@ export default function FilterBar({ activeMood, setActiveMood, activeOTT, setAct
             </button>
           ))}
         </div>
+        <button
+          type="button"
+          onClick={onHideWatchedToggle}
+          aria-pressed={hideWatched}
+          className={clsx(
+            'chip shrink-0 text-xs',
+            hideWatched ? 'active' : 'text-zinc-400'
+          )}
+        >
+          Hide Watched
+        </button>
       </div>
 
       {/* OTT row */}
@@ -76,9 +94,7 @@ export default function FilterBar({ activeMood, setActiveMood, activeOTT, setAct
             return (
               <button
                 key={ott.id}
-                onClick={() => setActiveOTT(prev =>
-                  prev.includes(ott.id) ? prev.filter(x => x !== ott.id) : [...prev, ott.id]
-                )}
+                onClick={() => onOTTSelect(ott.id)}
                 className={clsx(
                   'chip gap-2',
                   on ? 'border-white/30 bg-white/[0.07]' : ''
